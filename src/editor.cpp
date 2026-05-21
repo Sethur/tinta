@@ -237,12 +237,130 @@ static std::wstring editorGetClipboard(HWND hwnd) {
 
 // --- Scroll helpers ---
 
+// Compute how many characters fit per visual line when word wrap is on
+static int getWrapCols(const App& app, float editorWidth) {
+    float charWidth = app.editorCharWidth > 0 ? app.editorCharWidth : app.editorTextFormat->GetFontSize() * 0.6f;
+    float padding = dpi(app, 8.0f);
+    float gutterWidth = dpi(app, 48.0f);
+    float availableWidth = editorWidth - gutterWidth - padding * 2;
+    int cols = (int)(availableWidth / charWidth);
+    return std::max(cols, 10); // minimum 10 cols
+}
+
+// Check if a character is a word-wrap break point (whitespace)
+static bool isWrapWhitespace(wchar_t ch) {
+    if (ch == L' ' || ch == L'\t') return true;
+    // Unicode whitespace: thin space, en space, em space, etc.
+    if (ch >= 0x2000 && ch <= 0x200A) return true;
+    if (ch == 0x00A0 || ch == 0x1680 || ch == 0x202F || ch == 0x205F || ch == 0x3000) return true;
+    return false;
+}
+
+// Compute sub-line break offsets (relative to line start) for word-wrapped rendering.
+// Returns start offsets of each sub-line. First element is always 0.
+static std::vector<size_t> getWrapBreaks(const App& app, size_t logicalLine, int wrapCols) {
+    std::vector<size_t> breaks;
+    breaks.push_back(0);
+
+    size_t lineStart = app.editorLineStarts[logicalLine];
+    size_t lineLen = getLineLength(app, logicalLine);
+
+    if (lineLen <= (size_t)wrapCols) return breaks;
+
+    size_t pos = 0;
+    while (pos < lineLen) {
+        size_t remaining = lineLen - pos;
+        if (remaining <= (size_t)wrapCols) break; // rest fits on one sub-line
+
+        // Look for last whitespace within wrapCols characters from pos
+        size_t limit = pos + wrapCols;
+        size_t breakAt = 0;
+        bool found = false;
+        for (size_t i = limit; i > pos; i--) {
+            if (isWrapWhitespace(app.editorText[lineStart + i])) {
+                breakAt = i;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found || breakAt <= pos) {
+            // No whitespace found in this span - force break at wrapCols
+            breakAt = limit;
+        }
+
+        breaks.push_back(breakAt);
+        pos = breakAt;
+    }
+
+    return breaks;
+}
+
+// Count total visual lines for a given logical line (when word wrap is on)
+static int visualLinesForLogical(const App& app, size_t logicalLine, int wrapCols) {
+    size_t lineLen = getLineLength(app, logicalLine);
+    if (lineLen <= (size_t)wrapCols) return 1;
+    auto breaks = getWrapBreaks(app, logicalLine, wrapCols);
+    return (int)breaks.size();
+}
+
+// Get the visual line index (from the top of the document) for a given cursor position
+static int getVisualLineForPos(const App& app, size_t pos, int wrapCols) {
+    size_t logLine = getLineFromPos(app, pos);
+    size_t col = pos - app.editorLineStarts[logLine];
+    int visualLine = 0;
+    for (size_t i = 0; i < logLine; i++) {
+        visualLine += visualLinesForLogical(app, i, wrapCols);
+    }
+    // Find which sub-line the column falls into
+    auto breaks = getWrapBreaks(app, logLine, wrapCols);
+    for (size_t s = 1; s < breaks.size(); s++) {
+        if (col < breaks[s]) {
+            visualLine += (int)(s - 1);
+            return visualLine;
+        }
+    }
+    visualLine += (int)(breaks.size() - 1);
+    return visualLine;
+}
+
+// Get the column offset within the sub-line for a given position
+static size_t getColInSubLine(const App& app, size_t pos, int wrapCols) {
+    size_t logLine = getLineFromPos(app, pos);
+    size_t col = pos - app.editorLineStarts[logLine];
+    auto breaks = getWrapBreaks(app, logLine, wrapCols);
+    for (size_t s = breaks.size(); s > 0; s--) {
+        if (col >= breaks[s - 1]) {
+            return col - breaks[s - 1];
+        }
+    }
+    return col;
+}
+
+// Get total visual lines in the document
+static int getTotalVisualLines(const App& app, int wrapCols) {
+    int total = 0;
+    for (size_t i = 0; i < app.editorLineStarts.size(); i++) {
+        total += visualLinesForLogical(app, i, wrapCols);
+    }
+    return total;
+}
+
 static void editorEnsureCursorVisible(App& app) {
     if (app.editorLineStarts.empty()) return;
-    size_t line = getLineFromPos(app, app.editorCursorPos);
     float lineHeight = app.editorTextFormat ? app.editorTextFormat->GetFontSize() * 1.5f : 20.0f;
     float padding = dpi(app, 8.0f);
-    float cursorY = padding + line * lineHeight;
+    float cursorY;
+
+    if (app.editorWordWrap) {
+        float editorWidth = app.width * app.editorSplitRatio - 3;
+        int wrapCols = getWrapCols(app, editorWidth);
+        int visualLine = getVisualLineForPos(app, app.editorCursorPos, wrapCols);
+        cursorY = padding + visualLine * lineHeight;
+    } else {
+        size_t line = getLineFromPos(app, app.editorCursorPos);
+        cursorY = padding + line * lineHeight;
+    }
 
     if (cursorY < app.editorScrollY + lineHeight) {
         app.editorScrollY = std::max(0.0f, cursorY - lineHeight);
@@ -251,6 +369,7 @@ static void editorEnsureCursorVisible(App& app) {
         app.editorScrollY = cursorY + lineHeight * 2 - app.height;
     }
     app.editorScrollY = std::max(0.0f, app.editorScrollY);
+    app.editorScrolledLast = true;
 }
 
 // --- Editor search ---
@@ -306,6 +425,7 @@ void scrollEditorToMatch(App& app) {
     if (maxScroll > 0) {
         app.editorScrollY = std::min(app.editorScrollY, maxScroll);
     }
+    app.editorScrolledLast = true;
 }
 
 // --- Debounced reparse ---
@@ -398,6 +518,18 @@ void enterEditMode(App& app) {
 
     // Disable file watch while editing
     KillTimer(app.hwnd, 1); // TIMER_FILE_WATCH = 1
+
+    // Build line-to-byte-offset mapping for scroll sync
+    {
+        std::string utf8 = toUtf8(app.editorText);
+        app.editorLineByteOffsets.clear();
+        app.editorLineByteOffsets.push_back(0);
+        for (size_t i = 0; i < utf8.size(); i++) {
+            if (utf8[i] == '\n') {
+                app.editorLineByteOffsets.push_back(i + 1);
+            }
+        }
+    }
 
     // Show notification
     app.editorNotificationMsg = L"Press ESC twice to exit edit mode";
@@ -631,6 +763,14 @@ void handleEditorKeyDown(App& app, HWND hwnd, WPARAM wParam) {
         switch (wParam) {
             case 'S':
                 saveEditorFile(app, hwnd);
+                return;
+            case 'W':
+                app.editorWordWrap = !app.editorWordWrap;
+                app.editorNotificationMsg = app.editorWordWrap ? L"Word wrap ON" : L"Word wrap OFF";
+                app.showEditModeNotification = true;
+                app.editModeNotificationAlpha = 1.0f;
+                app.editModeNotificationStart = std::chrono::steady_clock::now();
+                InvalidateRect(hwnd, nullptr, FALSE);
                 return;
             case 'Z':
                 editorUndo(app);
@@ -946,15 +1086,46 @@ static size_t editorPosFromClick(const App& app, int x, int y) {
     float lineHeight = app.editorTextFormat->GetFontSize() * 1.5f;
     float padding = dpi(app, 8.0f);
     float charWidth = app.editorCharWidth > 0 ? app.editorCharWidth : app.editorTextFormat->GetFontSize() * 0.6f;
+    float gutterWidth = dpi(app, 48.0f);
 
     float adjustedY = y + app.editorScrollY - padding;
-    size_t line = (size_t)std::max(0, (int)(adjustedY / lineHeight));
+    int visualRow = std::max(0, (int)(adjustedY / lineHeight));
+
+    if (app.editorWordWrap) {
+        float editorWidth = app.width * app.editorSplitRatio - 3;
+        int wrapCols = getWrapCols(app, editorWidth);
+
+        // Map visual row to logical line and sub-row
+        int vrow = 0;
+        for (size_t i = 0; i < app.editorLineStarts.size(); i++) {
+            auto breaks = getWrapBreaks(app, i, wrapCols);
+            int vlines = (int)breaks.size();
+            if (vrow + vlines > visualRow) {
+                // Found the logical line
+                int subRow = visualRow - vrow;
+                size_t lineStart = app.editorLineStarts[i];
+                size_t lineLen = getLineLength(app, i);
+                size_t subStart = breaks[subRow];
+                size_t subEnd = (subRow + 1 < vlines) ? breaks[subRow + 1] : lineLen;
+                size_t subLen = subEnd - subStart;
+                float adjustedX = (float)x - gutterWidth - padding;
+                size_t col = (size_t)std::max(0, (int)(adjustedX / charWidth + 0.5f));
+                col = std::min(col, subLen);
+                return lineStart + subStart + col;
+            }
+            vrow += vlines;
+        }
+        // Past end
+        return app.editorText.size();
+    }
+
+    // Non-wrapped mode
+    size_t line = (size_t)visualRow;
     if (line >= app.editorLineStarts.size()) line = app.editorLineStarts.size() - 1;
 
     size_t lineStart = app.editorLineStarts[line];
     size_t lineLen = getLineLength(app, line);
 
-    float gutterWidth = dpi(app, 48.0f);
     float adjustedX = (float)x - gutterWidth - padding;
     size_t col = (size_t)std::max(0, (int)(adjustedX / charWidth + 0.5f));
     col = std::min(col, lineLen);
@@ -1094,6 +1265,7 @@ void handleEditorMouseWheel(App& app, HWND hwnd, float delta) {
     app.editorScrollY = std::max(0.0f, app.editorScrollY);
     float maxScroll = std::max(0.0f, app.editorContentHeight - app.height);
     app.editorScrollY = std::min(app.editorScrollY, maxScroll);
+    app.editorScrolledLast = true;
     InvalidateRect(hwnd, nullptr, FALSE);
 }
 
@@ -1116,11 +1288,6 @@ void renderEditor(App& app, float editorWidth) {
         D2D1::RectF(0, 0, editorWidth, (float)app.height),
         D2D1_ANTIALIAS_MODE_ALIASED);
 
-    // Calculate visible line range
-    int firstVisible = std::max(0, (int)((app.editorScrollY - padding) / lineHeight));
-    int lastVisible = (int)((app.editorScrollY + app.height) / lineHeight) + 1;
-    lastVisible = std::min(lastVisible, (int)app.editorLineStarts.size() - 1);
-
     // Selection range
     size_t selMin = 0, selMax = 0;
     if (app.editorHasSelection) {
@@ -1131,108 +1298,229 @@ void renderEditor(App& app, float editorWidth) {
     // Gutter width for line numbers
     float gutterWidth = dpi(app, 48.0f);
 
-    // Search match scanning index (both sorted by position, so we advance together)
+    // Search match scanning
     size_t searchScanIdx = 0;
     bool hasSearchMatches = app.showSearch && !app.searchQuery.empty() && !app.editorSearchMatches.empty();
 
-    // Advance search scan index to first match that could overlap visible lines
-    if (hasSearchMatches && firstVisible > 0) {
-        size_t firstVisiblePos = app.editorLineStarts[firstVisible];
-        while (searchScanIdx < app.editorSearchMatches.size() &&
-               app.editorSearchMatches[searchScanIdx].startPos + app.editorSearchMatches[searchScanIdx].length <= firstVisiblePos) {
-            searchScanIdx++;
-        }
-    }
+    if (app.editorWordWrap) {
+        // --- Word-wrapped rendering ---
+        int wrapCols = getWrapCols(app, editorWidth);
 
-    for (int i = firstVisible; i <= lastVisible && i < (int)app.editorLineStarts.size(); i++) {
-        float lineY = padding + i * lineHeight - app.editorScrollY;
-        size_t lineStart = app.editorLineStarts[i];
-        size_t lineLen = getLineLength(app, i);
+        // Compute first visible visual row
+        int firstVisualRow = std::max(0, (int)((app.editorScrollY - padding) / lineHeight));
+        int lastVisualRow = (int)((app.editorScrollY + app.height) / lineHeight) + 1;
 
-        // Line number
-        wchar_t lineNum[16];
-        swprintf(lineNum, 16, L"%d", i + 1);
-        D2D1_COLOR_F gutterColor = app.theme.text;
-        gutterColor.a = 0.3f;
-        app.brush->SetColor(gutterColor);
-        app.renderTarget->DrawText(lineNum, (UINT32)wcslen(lineNum), app.editorTextFormat,
-            D2D1::RectF(dpi(app, 4.0f), lineY, gutterWidth - dpi(app, 4.0f), lineY + lineHeight), app.brush);
+        // Walk through logical lines to find the first one that maps to the visible range
+        int visualRow = 0;
+        for (size_t i = 0; i < app.editorLineStarts.size(); i++) {
+            size_t lineStart = app.editorLineStarts[i];
+            size_t lineLen = getLineLength(app, i);
+            auto breaks = getWrapBreaks(app, i, wrapCols);
+            int vlines = (int)breaks.size();
 
-        // Selection highlight on this line
-        if (app.editorHasSelection && selMax > lineStart && selMin < lineStart + lineLen + 1) {
-            size_t hlStart = (selMin > lineStart) ? selMin - lineStart : 0;
-            size_t hlEnd = std::min(selMax - lineStart, lineLen + 1);
-            float hlX1 = gutterWidth + padding + hlStart * charWidth;
-            float hlX2 = gutterWidth + padding + hlEnd * charWidth;
-            app.brush->SetColor(D2D1::ColorF(0.2f, 0.4f, 0.9f, 0.35f));
-            app.renderTarget->FillRectangle(
-                D2D1::RectF(hlX1, lineY, hlX2, lineY + lineHeight), app.brush);
-        }
+            // Skip if entirely above visible area
+            if (visualRow + vlines <= firstVisualRow) {
+                visualRow += vlines;
+                continue;
+            }
+            // Stop if entirely below visible area
+            if (visualRow > lastVisualRow) break;
 
-        // Search match highlights on this line
-        if (hasSearchMatches) {
-            size_t lineEnd = lineStart + lineLen;
-            size_t si = searchScanIdx;
-            while (si < app.editorSearchMatches.size()) {
-                const auto& m = app.editorSearchMatches[si];
-                if (m.startPos >= lineEnd) break; // past this line
-                size_t mEnd = m.startPos + m.length;
-                if (mEnd <= lineStart) { si++; continue; } // before this line
+            // Render each sub-row of this logical line
+            for (int sub = 0; sub < vlines; sub++) {
+                int currentVisualRow = visualRow + sub;
+                if (currentVisualRow < firstVisualRow) continue;
+                if (currentVisualRow > lastVisualRow) break;
 
-                // Compute overlap with this line
-                size_t overlapStart = std::max(lineStart, m.startPos);
-                size_t overlapEnd = std::min(lineEnd, mEnd);
-                if (overlapStart < overlapEnd) {
-                    float hlX1 = gutterWidth + padding + (overlapStart - lineStart) * charWidth;
-                    float hlX2 = gutterWidth + padding + (overlapEnd - lineStart) * charWidth;
+                float lineY = padding + currentVisualRow * lineHeight - app.editorScrollY;
+                size_t subStart = breaks[sub];
+                size_t subEnd = (sub + 1 < vlines) ? breaks[sub + 1] : lineLen;
+                size_t subLen = subEnd - subStart;
 
-                    bool isCurrent = ((int)si == app.editorSearchCurrentIndex);
-                    if (isCurrent) {
-                        app.brush->SetColor(D2D1::ColorF(1.0f, 0.6f, 0.0f, 0.5f));  // Orange
-                    } else {
-                        app.brush->SetColor(D2D1::ColorF(1.0f, 0.9f, 0.0f, 0.3f));  // Yellow
-                    }
+                // Line number (only on first sub-row)
+                if (sub == 0) {
+                    wchar_t lineNum[16];
+                    swprintf(lineNum, 16, L"%d", (int)i + 1);
+                    D2D1_COLOR_F gutterColor = app.theme.text;
+                    gutterColor.a = 0.3f;
+                    app.brush->SetColor(gutterColor);
+                    app.renderTarget->DrawText(lineNum, (UINT32)wcslen(lineNum), app.editorTextFormat,
+                        D2D1::RectF(dpi(app, 4.0f), lineY, gutterWidth - dpi(app, 4.0f), lineY + lineHeight), app.brush);
+                }
+
+                // Selection highlight on this sub-row
+                size_t absStart = lineStart + subStart;
+                size_t absEnd = lineStart + subEnd;
+                if (app.editorHasSelection && selMax > absStart && selMin < absEnd + 1) {
+                    size_t hlStart = (selMin > absStart) ? selMin - absStart : 0;
+                    size_t hlEnd = std::min(selMax - absStart, subLen + 1);
+                    float hlX1 = gutterWidth + padding + hlStart * charWidth;
+                    float hlX2 = gutterWidth + padding + hlEnd * charWidth;
+                    app.brush->SetColor(D2D1::ColorF(0.2f, 0.4f, 0.9f, 0.35f));
                     app.renderTarget->FillRectangle(
                         D2D1::RectF(hlX1, lineY, hlX2, lineY + lineHeight), app.brush);
                 }
-                si++;
+
+                // Search match highlights on this sub-row
+                if (hasSearchMatches) {
+                    for (size_t si = searchScanIdx; si < app.editorSearchMatches.size(); si++) {
+                        const auto& m = app.editorSearchMatches[si];
+                        if (m.startPos >= absEnd) break;
+                        size_t mEnd = m.startPos + m.length;
+                        if (mEnd <= absStart) continue;
+
+                        size_t overlapStart = std::max(absStart, m.startPos);
+                        size_t overlapEnd = std::min(absEnd, mEnd);
+                        if (overlapStart < overlapEnd) {
+                            float hlX1 = gutterWidth + padding + (overlapStart - absStart) * charWidth;
+                            float hlX2 = gutterWidth + padding + (overlapEnd - absStart) * charWidth;
+                            bool isCurrent = ((int)si == app.editorSearchCurrentIndex);
+                            if (isCurrent) {
+                                app.brush->SetColor(D2D1::ColorF(1.0f, 0.6f, 0.0f, 0.5f));
+                            } else {
+                                app.brush->SetColor(D2D1::ColorF(1.0f, 0.9f, 0.0f, 0.3f));
+                            }
+                            app.renderTarget->FillRectangle(
+                                D2D1::RectF(hlX1, lineY, hlX2, lineY + lineHeight), app.brush);
+                        }
+                    }
+                }
+
+                // Text for this sub-row
+                if (subLen > 0) {
+                    std::wstring_view subView(app.editorText.data() + lineStart + subStart, subLen);
+                    app.brush->SetColor(app.theme.text);
+                    app.renderTarget->DrawText(subView.data(), (UINT32)subView.size(), app.editorTextFormat,
+                        D2D1::RectF(gutterWidth + padding, lineY,
+                                    editorWidth - padding, lineY + lineHeight), app.brush);
+                }
             }
-            // Advance scan index past matches that ended before or at this line's start
+            visualRow += vlines;
+        }
+
+        // Cursor (blinking)
+        auto now = std::chrono::steady_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        bool cursorVisible = (ms % 1000) < 500;
+        if (cursorVisible) {
+            int curVisualLine = getVisualLineForPos(app, app.editorCursorPos, wrapCols);
+            size_t colInSubRow = getColInSubLine(app, app.editorCursorPos, wrapCols);
+            float curX = gutterWidth + padding + colInSubRow * charWidth;
+            float curY = padding + curVisualLine * lineHeight - app.editorScrollY;
+
+            app.brush->SetColor(app.theme.text);
+            app.renderTarget->FillRectangle(
+                D2D1::RectF(curX, curY, curX + dpi(app, 2.0f), curY + lineHeight), app.brush);
+        }
+
+        // Update content height
+        int totalVisual = getTotalVisualLines(app, wrapCols);
+        app.editorContentHeight = padding * 2 + totalVisual * lineHeight;
+
+    } else {
+        // --- Non-wrapped rendering (original code) ---
+        int firstVisible = std::max(0, (int)((app.editorScrollY - padding) / lineHeight));
+        int lastVisible = (int)((app.editorScrollY + app.height) / lineHeight) + 1;
+        lastVisible = std::min(lastVisible, (int)app.editorLineStarts.size() - 1);
+
+        // Advance search scan index to first match that could overlap visible lines
+        if (hasSearchMatches && firstVisible > 0) {
+            size_t firstVisiblePos = app.editorLineStarts[firstVisible];
             while (searchScanIdx < app.editorSearchMatches.size() &&
-                   app.editorSearchMatches[searchScanIdx].startPos + app.editorSearchMatches[searchScanIdx].length <= lineEnd) {
+                   app.editorSearchMatches[searchScanIdx].startPos + app.editorSearchMatches[searchScanIdx].length <= firstVisiblePos) {
                 searchScanIdx++;
             }
         }
 
-        // Line text
-        if (lineLen > 0) {
-            std::wstring_view lineView(app.editorText.data() + lineStart, lineLen);
-            app.brush->SetColor(app.theme.text);
-            app.renderTarget->DrawText(lineView.data(), (UINT32)lineView.size(), app.editorTextFormat,
-                D2D1::RectF(gutterWidth + padding, lineY,
-                            editorWidth - padding, lineY + lineHeight), app.brush);
+        for (int i = firstVisible; i <= lastVisible && i < (int)app.editorLineStarts.size(); i++) {
+            float lineY = padding + i * lineHeight - app.editorScrollY;
+            size_t lineStart = app.editorLineStarts[i];
+            size_t lineLen = getLineLength(app, i);
+
+            // Line number
+            wchar_t lineNum[16];
+            swprintf(lineNum, 16, L"%d", i + 1);
+            D2D1_COLOR_F gutterColor = app.theme.text;
+            gutterColor.a = 0.3f;
+            app.brush->SetColor(gutterColor);
+            app.renderTarget->DrawText(lineNum, (UINT32)wcslen(lineNum), app.editorTextFormat,
+                D2D1::RectF(dpi(app, 4.0f), lineY, gutterWidth - dpi(app, 4.0f), lineY + lineHeight), app.brush);
+
+            // Selection highlight on this line
+            if (app.editorHasSelection && selMax > lineStart && selMin < lineStart + lineLen + 1) {
+                size_t hlStart = (selMin > lineStart) ? selMin - lineStart : 0;
+                size_t hlEnd = std::min(selMax - lineStart, lineLen + 1);
+                float hlX1 = gutterWidth + padding + hlStart * charWidth;
+                float hlX2 = gutterWidth + padding + hlEnd * charWidth;
+                app.brush->SetColor(D2D1::ColorF(0.2f, 0.4f, 0.9f, 0.35f));
+                app.renderTarget->FillRectangle(
+                    D2D1::RectF(hlX1, lineY, hlX2, lineY + lineHeight), app.brush);
+            }
+
+            // Search match highlights on this line
+            if (hasSearchMatches) {
+                size_t lineEnd = lineStart + lineLen;
+                size_t si = searchScanIdx;
+                while (si < app.editorSearchMatches.size()) {
+                    const auto& m = app.editorSearchMatches[si];
+                    if (m.startPos >= lineEnd) break;
+                    size_t mEnd = m.startPos + m.length;
+                    if (mEnd <= lineStart) { si++; continue; }
+
+                    size_t overlapStart = std::max(lineStart, m.startPos);
+                    size_t overlapEnd = std::min(lineEnd, mEnd);
+                    if (overlapStart < overlapEnd) {
+                        float hlX1 = gutterWidth + padding + (overlapStart - lineStart) * charWidth;
+                        float hlX2 = gutterWidth + padding + (overlapEnd - lineStart) * charWidth;
+
+                        bool isCurrent = ((int)si == app.editorSearchCurrentIndex);
+                        if (isCurrent) {
+                            app.brush->SetColor(D2D1::ColorF(1.0f, 0.6f, 0.0f, 0.5f));
+                        } else {
+                            app.brush->SetColor(D2D1::ColorF(1.0f, 0.9f, 0.0f, 0.3f));
+                        }
+                        app.renderTarget->FillRectangle(
+                            D2D1::RectF(hlX1, lineY, hlX2, lineY + lineHeight), app.brush);
+                    }
+                    si++;
+                }
+                while (searchScanIdx < app.editorSearchMatches.size() &&
+                       app.editorSearchMatches[searchScanIdx].startPos + app.editorSearchMatches[searchScanIdx].length <= lineEnd) {
+                    searchScanIdx++;
+                }
+            }
+
+            // Line text
+            if (lineLen > 0) {
+                std::wstring_view lineView(app.editorText.data() + lineStart, lineLen);
+                app.brush->SetColor(app.theme.text);
+                app.renderTarget->DrawText(lineView.data(), (UINT32)lineView.size(), app.editorTextFormat,
+                    D2D1::RectF(gutterWidth + padding, lineY,
+                                editorWidth - padding, lineY + lineHeight), app.brush);
+            }
         }
+
+        // Cursor (blinking)
+        auto now = std::chrono::steady_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        bool cursorVisible = (ms % 1000) < 500;
+        if (cursorVisible) {
+            size_t curLine = getLineFromPos(app, app.editorCursorPos);
+            size_t curCol = getColFromPos(app, app.editorCursorPos);
+            float curX = gutterWidth + padding + curCol * charWidth;
+            float curY = padding + curLine * lineHeight - app.editorScrollY;
+
+            app.brush->SetColor(app.theme.text);
+            app.renderTarget->FillRectangle(
+                D2D1::RectF(curX, curY, curX + dpi(app, 2.0f), curY + lineHeight), app.brush);
+        }
+
+        // Update content height for scrolling
+        app.editorContentHeight = padding * 2 + app.editorLineStarts.size() * lineHeight;
     }
 
-    // Cursor (blinking)
-    auto now = std::chrono::steady_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    bool cursorVisible = (ms % 1000) < 500;
-    if (cursorVisible) {
-        size_t curLine = getLineFromPos(app, app.editorCursorPos);
-        size_t curCol = getColFromPos(app, app.editorCursorPos);
-        float curX = gutterWidth + padding + curCol * charWidth;
-        float curY = padding + curLine * lineHeight - app.editorScrollY;
-
-        app.brush->SetColor(app.theme.text);
-        app.renderTarget->FillRectangle(
-            D2D1::RectF(curX, curY, curX + dpi(app, 2.0f), curY + lineHeight), app.brush);
-    }
     // Keep redrawing for cursor blink
     InvalidateRect(app.hwnd, nullptr, FALSE);
-
-    // Update content height for scrolling
-    app.editorContentHeight = padding * 2 + app.editorLineStarts.size() * lineHeight;
 
     // Editor scrollbar
     if (app.editorContentHeight > app.height) {
@@ -1282,20 +1570,23 @@ void renderEditModeNotification(App& app) {
     auto now = std::chrono::steady_clock::now();
     float elapsed = std::chrono::duration<float>(now - app.editModeNotificationStart).count();
 
-    if (elapsed > 3.0f) {
+    if (elapsed > 6.0f) {
         app.showEditModeNotification = false;
         return;
     }
 
     float alpha = 1.0f;
-    if (elapsed > 1.5f) {
-        alpha = 1.0f - (elapsed - 1.5f) / 1.5f;
+    if (elapsed > 3.0f) {
+        alpha = 1.0f - (elapsed - 3.0f) / 3.0f;
     }
 
     const wchar_t* msg = app.editorNotificationMsg.c_str();
     size_t msgLen = app.editorNotificationMsg.size();
 
-    float pillWidth = (msgLen <= 10) ? dpi(app, 120.0f) : dpi(app, 300.0f);
+    // Size pill to fit message text with padding
+    float charWidth = dpi(app, 8.0f);
+    float padding = dpi(app, 30.0f);
+    float pillWidth = std::max(dpi(app, 120.0f), msgLen * charWidth + padding * 2);
     float pillHeight = dpi(app, 30.0f);
     float pillX = (float)(app.width - pillWidth) / 2.0f;
     float pillY = (float)app.height - dpi(app, 60.0f);

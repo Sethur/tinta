@@ -148,6 +148,8 @@ int detectLanguage(const std::wstring& lang) {
         return 6;  // Bash/Shell
     if (lower == L"csharp" || lower == L"cs" || lower == L"c#")
         return 7;  // C#
+    if (lower == L"diff" || lower == L"patch")
+        return 8;  // Diff
     return 0;  // Unknown
 }
 
@@ -167,6 +169,38 @@ const std::unordered_set<std::wstring>* getKeywordsForLanguage(int lang) {
 std::vector<SyntaxToken> tokenizeLine(const std::wstring& line, int language, bool& inBlockComment) {
     std::vector<SyntaxToken> tokens;
     const std::unordered_set<std::wstring>* keywords = getKeywordsForLanguage(language);
+
+    // Diff: tokenize code normally, but mark prefix for background coloring
+    if (language == 8) {
+        if (line.empty()) {
+            return tokens;
+        }
+        // File headers and hunk markers: whole line as DiffHeader
+        if ((line[0] == L'+' && line.length() >= 3 && line[1] == L'+' && line[2] == L'+') ||
+            (line[0] == L'-' && line.length() >= 3 && line[1] == L'-' && line[2] == L'-') ||
+            (line[0] == L'@')) {
+            tokens.push_back({std::wstring_view(line.data(), line.length()), SyntaxTokenType::DiffHeader});
+            return tokens;
+        }
+        // Addition/removal lines: emit prefix token, then tokenize rest as generic code
+        if (line[0] == L'+' || line[0] == L'-') {
+            SyntaxTokenType prefixType = (line[0] == L'+') ? SyntaxTokenType::DiffAdd : SyntaxTokenType::DiffRemove;
+            tokens.push_back({std::wstring_view(line.data(), 1), prefixType});
+            // Tokenize the rest of the line as generic code (language 0 path)
+            std::wstring rest = line.substr(1);
+            bool innerBlockComment = false;
+            std::vector<SyntaxToken> innerTokens = tokenizeLine(rest, 0, innerBlockComment);
+            // Remap string_views to point into original line
+            for (const auto& t : innerTokens) {
+                size_t offset = (t.text.data() - rest.data()) + 1;
+                tokens.push_back({std::wstring_view(line.data() + offset, t.text.length()), t.tokenType});
+            }
+            return tokens;
+        }
+        // Context lines: tokenize as generic code
+        bool innerBlockComment2 = false;
+        return tokenizeLine(line, 0, innerBlockComment2);
+    }
 
     size_t i = 0;
     while (i < line.length()) {
@@ -226,6 +260,49 @@ std::vector<SyntaxToken> tokenizeLine(const std::wstring& line, int language, bo
             tokens.push_back({std::wstring_view(line.data() + i, line.length() - i),
                               SyntaxTokenType::Comment});
             return tokens;
+        }
+
+        // Decorators/Attributes: @word in Python/JS/TS
+        if ((language == 2 || language == 3) && c == L'@') {
+            size_t start = i;
+            i++;
+            while (i < line.length() && (iswalnum(line[i]) || line[i] == L'_' || line[i] == L'.')) i++;
+            tokens.push_back({std::wstring_view(line.data() + start, i - start),
+                              SyntaxTokenType::Decorator});
+            continue;
+        }
+
+        // Rust attributes: #[...]
+        if (language == 4 && c == L'#' && i + 1 < line.length() && line[i+1] == L'[') {
+            size_t start = i;
+            int depth = 0;
+            while (i < line.length()) {
+                if (line[i] == L'[') depth++;
+                else if (line[i] == L']') { depth--; if (depth == 0) { i++; break; } }
+                i++;
+            }
+            tokens.push_back({std::wstring_view(line.data() + start, i - start),
+                              SyntaxTokenType::Decorator});
+            continue;
+        }
+
+        // C# attributes: [Word] or [Word(...)] at start of meaningful content
+        if (language == 7 && c == L'[') {
+            // Peek ahead to check if it looks like an attribute (starts with uppercase letter)
+            size_t peek = i + 1;
+            while (peek < line.length() && iswspace(line[peek])) peek++;
+            if (peek < line.length() && iswupper(line[peek])) {
+                size_t start = i;
+                int depth = 0;
+                while (i < line.length()) {
+                    if (line[i] == L'[') depth++;
+                    else if (line[i] == L']') { depth--; if (depth == 0) { i++; break; } }
+                    i++;
+                }
+                tokens.push_back({std::wstring_view(line.data() + start, i - start),
+                                  SyntaxTokenType::Decorator});
+                continue;
+            }
         }
 
         // C# verbatim strings (@"...") and interpolated strings ($"...")
@@ -333,6 +410,22 @@ std::vector<SyntaxToken> tokenizeLine(const std::wstring& line, int language, bo
             } else if (language == 7 && iswupper(word[0]) && word.length() > 1) {
                 // C# PascalCase heuristic: uppercase-starting identifiers are likely types
                 tokens.push_back({view, SyntaxTokenType::TypeName});
+            } else if (word.length() >= 2) {
+                // ALL_CAPS heuristic for constants/macros
+                bool allCaps = true;
+                for (size_t k = 0; k < word.length(); k++) {
+                    if (!iswupper(word[k]) && word[k] != L'_' && !iswdigit(word[k])) { allCaps = false; break; }
+                }
+                // Must have at least one letter (not just underscores/digits)
+                bool hasLetter = false;
+                for (size_t k = 0; k < word.length(); k++) {
+                    if (iswupper(word[k])) { hasLetter = true; break; }
+                }
+                if (allCaps && hasLetter) {
+                    tokens.push_back({view, SyntaxTokenType::Constant});
+                } else {
+                    tokens.push_back({view, SyntaxTokenType::Plain});
+                }
             } else {
                 tokens.push_back({view, SyntaxTokenType::Plain});
             }
@@ -371,6 +464,11 @@ D2D1_COLOR_F getTokenColor(const D2DTheme& theme, SyntaxTokenType ttype) {
         case SyntaxTokenType::Function: return theme.syntaxFunction;
         case SyntaxTokenType::TypeName:     return theme.syntaxType;
         case SyntaxTokenType::ControlFlow:  return theme.syntaxControlFlow;
+        case SyntaxTokenType::Decorator:    return theme.syntaxDecorator;
+        case SyntaxTokenType::Constant:     return theme.syntaxConstant;
+        case SyntaxTokenType::DiffAdd:      return theme.syntaxDiffAdd;
+        case SyntaxTokenType::DiffRemove:   return theme.syntaxDiffRemove;
+        case SyntaxTokenType::DiffHeader:   return theme.syntaxDiffHeader;
         case SyntaxTokenType::Operator: return theme.code;
         default:                  return theme.code;
     }

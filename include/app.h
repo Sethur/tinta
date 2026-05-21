@@ -40,7 +40,7 @@ struct StartupMetrics {
 };
 
 // Syntax highlighting token types
-enum class SyntaxTokenType { Plain, Keyword, String, Comment, Number, Function, TypeName, Operator, ControlFlow };
+enum class SyntaxTokenType { Plain, Keyword, String, Comment, Number, Function, TypeName, Operator, ControlFlow, Decorator, Constant, DiffAdd, DiffRemove, DiffHeader };
 
 // Theme colors
 struct D2DTheme {
@@ -64,6 +64,11 @@ struct D2DTheme {
     D2D1_COLOR_F syntaxFunction;
     D2D1_COLOR_F syntaxType;
     D2D1_COLOR_F syntaxControlFlow;
+    D2D1_COLOR_F syntaxDecorator;
+    D2D1_COLOR_F syntaxConstant;
+    D2D1_COLOR_F syntaxDiffAdd;
+    D2D1_COLOR_F syntaxDiffRemove;
+    D2D1_COLOR_F syntaxDiffHeader;
 };
 
 // Helper to create color from hex
@@ -89,7 +94,7 @@ extern const int THEME_COUNT;
 
 // Persistent settings
 struct Settings {
-    int themeIndex = 5;          // Default to Midnight
+    int themeIndex = 3;          // Default to GitHub Dark
     float zoomFactor = 1.0f;
     int windowX = CW_USEDEFAULT;
     int windowY = CW_USEDEFAULT;
@@ -182,8 +187,8 @@ struct App {
     float zoomFactor = 1.0f;    // User zoom (Ctrl+scroll)
     bool darkMode = true;
     bool showStats = false;
-    int currentThemeIndex = 5;  // Default to "Midnight" (first dark theme)
-    D2DTheme theme = THEMES[5];
+    int currentThemeIndex = 3;  // Default to GitHub Dark (first dark theme)
+    D2DTheme theme = THEMES[3];
 
     // Theme chooser overlay
     bool showThemeChooser = false;
@@ -367,6 +372,7 @@ struct App {
 
     // Edit mode
     bool editMode = false;
+    bool editorWordWrap = false;
     float editorSplitRatio = 0.5f;
     bool draggingSeparator = false;
     float separatorDragStartX = 0;
@@ -399,6 +405,7 @@ struct App {
     // Editor scroll
     float editorScrollY = 0;
     float editorContentHeight = 0;
+    bool editorScrolledLast = true; // true = sync preview from editor, false = sync editor from preview
 
     // Editor search
     struct EditorSearchMatch {

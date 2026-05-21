@@ -534,6 +534,19 @@ static void layoutCodeBlock(App& app, const ElementPtr& elem, float& y, float in
             std::vector<SyntaxToken> tokens = tokenizeLine(wline, language, inBlockComment);
             float tokenX = indent + padding;
 
+            // Diff background: draw colored background for +/- lines
+            if (language == 8 && !tokens.empty()) {
+                if (tokens[0].tokenType == SyntaxTokenType::DiffAdd) {
+                    D2D1_COLOR_F bg = app.theme.syntaxDiffAdd;
+                    bg.a = 0.15f;
+                    app.layoutRects.push_back({D2D1::RectF(indent, textY, indent + maxWidth, textY + lineHeight), bg});
+                } else if (tokens[0].tokenType == SyntaxTokenType::DiffRemove) {
+                    D2D1_COLOR_F bg = app.theme.syntaxDiffRemove;
+                    bg.a = 0.15f;
+                    app.layoutRects.push_back({D2D1::RectF(indent, textY, indent + maxWidth, textY + lineHeight), bg});
+                }
+            }
+
             for (const auto& token : tokens) {
                 if (token.text.empty()) continue;
 

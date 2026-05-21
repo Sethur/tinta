@@ -40,48 +40,97 @@ void render(App& app) {
         layoutDocument(app);
     }
 
-    // Sync preview scroll to editor scroll position using source-offset anchors
+    // Bidirectional scroll sync between editor and preview in edit mode
     if (app.editMode && !app.scrollAnchors.empty() && !app.editorLineByteOffsets.empty()) {
-        // Find the editor's top visible line
         float lineHeight = app.editorTextFormat ? app.editorTextFormat->GetFontSize() * 1.5f : 20.0f;
-        int topLine = (int)(app.editorScrollY / lineHeight);
-        topLine = std::max(0, std::min(topLine, (int)app.editorLineByteOffsets.size() - 1));
-        size_t topByteOffset = app.editorLineByteOffsets[topLine];
 
-        // Binary search for the anchor just before this byte offset
-        size_t lo = 0, hi = app.scrollAnchors.size();
-        while (lo + 1 < hi) {
-            size_t mid = (lo + hi) / 2;
-            if (app.scrollAnchors[mid].sourceOffset <= topByteOffset) lo = mid;
-            else hi = mid;
-        }
+        if (app.editorScrolledLast) {
+            // Sync preview scroll FROM editor scroll position using source-offset anchors
+            int topLine = (int)(app.editorScrollY / lineHeight);
+            topLine = std::max(0, std::min(topLine, (int)app.editorLineByteOffsets.size() - 1));
+            size_t topByteOffset = app.editorLineByteOffsets[topLine];
 
-        // Interpolate between anchor[lo] and anchor[lo+1]
-        float targetY;
-        if (lo + 1 < app.scrollAnchors.size() &&
-            app.scrollAnchors[lo + 1].sourceOffset > app.scrollAnchors[lo].sourceOffset) {
-            float t = (float)(topByteOffset - app.scrollAnchors[lo].sourceOffset) /
-                      (float)(app.scrollAnchors[lo + 1].sourceOffset - app.scrollAnchors[lo].sourceOffset);
-            t = std::max(0.0f, std::min(t, 1.0f));
-            targetY = app.scrollAnchors[lo].renderedY +
-                       t * (app.scrollAnchors[lo + 1].renderedY - app.scrollAnchors[lo].renderedY);
-        } else {
-            // Last anchor or single anchor — use ratio for remaining content
-            targetY = app.scrollAnchors[lo].renderedY;
-            if (app.contentHeight > app.scrollAnchors[lo].renderedY) {
-                size_t lastOffset = app.scrollAnchors[lo].sourceOffset;
-                size_t totalBytes = app.editorLineByteOffsets.back();
-                if (totalBytes > lastOffset) {
-                    float t = (float)(topByteOffset - lastOffset) / (float)(totalBytes - lastOffset);
-                    t = std::max(0.0f, std::min(t, 1.0f));
-                    targetY += t * (app.contentHeight - app.scrollAnchors[lo].renderedY);
+            // Binary search for the anchor just before this byte offset
+            size_t lo = 0, hi = app.scrollAnchors.size();
+            while (lo + 1 < hi) {
+                size_t mid = (lo + hi) / 2;
+                if (app.scrollAnchors[mid].sourceOffset <= topByteOffset) lo = mid;
+                else hi = mid;
+            }
+
+            // Interpolate between anchor[lo] and anchor[lo+1]
+            float targetY;
+            if (lo + 1 < app.scrollAnchors.size() &&
+                app.scrollAnchors[lo + 1].sourceOffset > app.scrollAnchors[lo].sourceOffset) {
+                float t = (float)(topByteOffset - app.scrollAnchors[lo].sourceOffset) /
+                          (float)(app.scrollAnchors[lo + 1].sourceOffset - app.scrollAnchors[lo].sourceOffset);
+                t = std::max(0.0f, std::min(t, 1.0f));
+                targetY = app.scrollAnchors[lo].renderedY +
+                           t * (app.scrollAnchors[lo + 1].renderedY - app.scrollAnchors[lo].renderedY);
+            } else {
+                // Last anchor or single anchor — use ratio for remaining content
+                targetY = app.scrollAnchors[lo].renderedY;
+                if (app.contentHeight > app.scrollAnchors[lo].renderedY) {
+                    size_t lastOffset = app.scrollAnchors[lo].sourceOffset;
+                    size_t totalBytes = app.editorLineByteOffsets.back();
+                    if (totalBytes > lastOffset) {
+                        float t = (float)(topByteOffset - lastOffset) / (float)(totalBytes - lastOffset);
+                        t = std::max(0.0f, std::min(t, 1.0f));
+                        targetY += t * (app.contentHeight - app.scrollAnchors[lo].renderedY);
+                    }
                 }
             }
-        }
 
-        float previewMaxScroll = std::max(0.0f, app.contentHeight - (float)app.height);
-        app.scrollY = std::max(0.0f, std::min(targetY, previewMaxScroll));
-        app.targetScrollY = app.scrollY;
+            float previewMaxScroll = std::max(0.0f, app.contentHeight - (float)app.height);
+            app.scrollY = std::max(0.0f, std::min(targetY, previewMaxScroll));
+            app.targetScrollY = app.scrollY;
+        } else {
+            // Sync editor scroll FROM preview scroll position (reverse mapping)
+            float previewY = app.scrollY;
+
+            // Binary search for the anchor just before this rendered Y
+            size_t lo = 0, hi = app.scrollAnchors.size();
+            while (lo + 1 < hi) {
+                size_t mid = (lo + hi) / 2;
+                if (app.scrollAnchors[mid].renderedY <= previewY) lo = mid;
+                else hi = mid;
+            }
+
+            // Interpolate to find the corresponding byte offset
+            size_t targetByteOffset;
+            if (lo + 1 < app.scrollAnchors.size() &&
+                app.scrollAnchors[lo + 1].renderedY > app.scrollAnchors[lo].renderedY) {
+                float t = (previewY - app.scrollAnchors[lo].renderedY) /
+                          (app.scrollAnchors[lo + 1].renderedY - app.scrollAnchors[lo].renderedY);
+                t = std::max(0.0f, std::min(t, 1.0f));
+                targetByteOffset = app.scrollAnchors[lo].sourceOffset +
+                    (size_t)(t * (float)(app.scrollAnchors[lo + 1].sourceOffset - app.scrollAnchors[lo].sourceOffset));
+            } else {
+                // Last anchor — extrapolate using remaining content ratio
+                targetByteOffset = app.scrollAnchors[lo].sourceOffset;
+                if (app.contentHeight > app.scrollAnchors[lo].renderedY) {
+                    size_t totalBytes = app.editorLineByteOffsets.back();
+                    size_t lastOffset = app.scrollAnchors[lo].sourceOffset;
+                    if (totalBytes > lastOffset) {
+                        float t = (previewY - app.scrollAnchors[lo].renderedY) /
+                                  (app.contentHeight - app.scrollAnchors[lo].renderedY);
+                        t = std::max(0.0f, std::min(t, 1.0f));
+                        targetByteOffset = lastOffset + (size_t)(t * (float)(totalBytes - lastOffset));
+                    }
+                }
+            }
+
+            // Find the editor line corresponding to this byte offset
+            size_t targetLine = 0;
+            for (size_t i = 0; i < app.editorLineByteOffsets.size(); i++) {
+                if (app.editorLineByteOffsets[i] <= targetByteOffset) targetLine = i;
+                else break;
+            }
+
+            float targetEditorY = targetLine * lineHeight;
+            float editorMaxScroll = std::max(0.0f, app.editorContentHeight - (float)app.height);
+            app.editorScrollY = std::max(0.0f, std::min(targetEditorY, editorMaxScroll));
+        }
     }
 
     // Edit mode: split view rendering

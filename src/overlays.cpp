@@ -483,15 +483,41 @@ void renderThemeChooser(App& app) {
     // Theme grid - 2 columns, 5 rows
     float gridStartY = panelY + dpi(app, 75.0f);
     float cardWidth = (panelWidth - dpi(app, 60.0f)) / 2;  // 2 columns with padding
-    float cardHeight = (panelHeight - dpi(app, 130.0f)) / 5;  // 5 rows
+    // Count light/dark themes for dynamic grid
+    int numLight = 0, numDark = 0;
+    for (int i = 0; i < THEME_COUNT; i++) { if (THEMES[i].isDark) numDark++; else numLight++; }
+    int maxRows = (numLight > numDark) ? numLight : numDark;
+    float cardHeight = (panelHeight - dpi(app, 130.0f)) / (maxRows > 0 ? maxRows : 1);
     float cardPadding = dpi(app, 8.0f);
 
-    app.hoveredThemeIndex = -1;
+    // Check mouse hover over any theme card; if found, override keyboard selection
+    int mouseHovered = -1;
+    int lightIdx = 0, darkIdx = 0;
+    for (int i = 0; i < THEME_COUNT; i++) {
+        const D2DTheme& t = THEMES[i];
+        int col = t.isDark ? 1 : 0;
+        int row = t.isDark ? darkIdx++ : lightIdx++;
+        float cardX = panelX + dpi(app, 20.0f) + col * (cardWidth + dpi(app, 20.0f));
+        float cardY = gridStartY + row * cardHeight;
+        float innerX = cardX + cardPadding;
+        float innerY = cardY + cardPadding;
+        float innerW = cardWidth - cardPadding * 2;
+        float innerH = cardHeight - cardPadding * 2;
+        if (app.mouseX >= innerX && app.mouseX <= innerX + innerW &&
+            app.mouseY >= innerY && app.mouseY <= innerY + innerH) {
+            mouseHovered = i;
+            break;
+        }
+    }
+    if (mouseHovered >= 0) {
+        app.hoveredThemeIndex = mouseHovered;
+    }
 
+    lightIdx = 0; darkIdx = 0;
     for (int i = 0; i < THEME_COUNT; i++) {
         const D2DTheme& t = THEMES[i];
         int col = t.isDark ? 1 : 0;  // Light themes left, dark themes right
-        int row = t.isDark ? (i - 5) : i;
+        int row = t.isDark ? darkIdx++ : lightIdx++;
 
         float cardX = panelX + dpi(app, 20.0f) + col * (cardWidth + dpi(app, 20.0f));
         float cardY = gridStartY + row * cardHeight;
@@ -500,14 +526,9 @@ void renderThemeChooser(App& app) {
         float innerW = cardWidth - cardPadding * 2;
         float innerH = cardHeight - cardPadding * 2;
 
-        // Check hover
-        bool isHovered = (app.mouseX >= innerX && app.mouseX <= innerX + innerW &&
-                          app.mouseY >= innerY && app.mouseY <= innerY + innerH);
+        // Check hover (from mouse or keyboard)
+        bool isHovered = (i == app.hoveredThemeIndex);
         bool isSelected = (i == app.currentThemeIndex);
-
-        if (isHovered) {
-            app.hoveredThemeIndex = i;
-        }
 
         // Card background (theme preview)
         D2D1_ROUNDED_RECT cardRect = D2D1::RoundedRect(

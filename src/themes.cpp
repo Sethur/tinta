@@ -1,223 +1,195 @@
 #include "app.h"
 
-// 10 Distinctive Themes - 5 Light, 5 Dark
+// 7 Themes - 3 Light, 4 Dark
 const D2DTheme THEMES[] = {
     // ═══════════════════════════════════════════════════════════
     // LIGHT THEMES
     // ═══════════════════════════════════════════════════════════
 
-    // 1. Paper - Warm sepia, literary manuscript feel
+    // 1. GitHub Light - Clean and familiar
     {
-        L"Paper", L"Segoe UI", L"Consolas", false,
-        hexColor(0xF5F1E8),    // background - warm cream
-        hexColor(0x3D3329),    // text - deep brown
-        hexColor(0x2A1F16),    // heading - dark brown
-        hexColor(0xB85A3C),    // link - terracotta
-        hexColor(0x6B5344),    // code - brown
-        hexColor(0xEDE6DA),    // codeBackground - parchment
-        hexColor(0xC4B8A8),    // blockquoteBorder
-        hexColor(0xB85A3C),    // accent
-        // Syntax colors
-        hexColor(0x8B4513),    // syntaxKeyword - saddle brown
-        hexColor(0x2E8B57),    // syntaxString - sea green
-        hexColor(0x808080),    // syntaxComment - gray
-        hexColor(0xB8860B),    // syntaxNumber - dark goldenrod
-        hexColor(0x4169E1),    // syntaxFunction - royal blue
-        hexColor(0x9932CC),    // syntaxType - dark orchid
-        hexColor(0x8F08C4)     // syntaxControlFlow - VS purple
+        L"GitHub Light", L"Segoe UI", L"Consolas", false,
+        hexColor(0xFFFFFF),    // background - white
+        hexColor(0x1F2328),    // text - near black
+        hexColor(0x1F2328),    // heading - same as text
+        hexColor(0x0969DA),    // link - blue
+        hexColor(0x1F2328),    // code - near black
+        hexColor(0xF6F8FA),    // codeBackground - light gray
+        hexColor(0xD1D9E0),    // blockquoteBorder
+        hexColor(0x0969DA),    // accent - blue
+        // Syntax colors (GitHub Light)
+        hexColor(0xCF222E),    // syntaxKeyword - red
+        hexColor(0x0A3069),    // syntaxString - deep blue
+        hexColor(0x59636E),    // syntaxComment - gray
+        hexColor(0x0550AE),    // syntaxNumber - blue
+        hexColor(0x6639BA),    // syntaxFunction - purple
+        hexColor(0x0550AE),    // syntaxType - blue
+        hexColor(0xCF222E),    // syntaxControlFlow - red
+        hexColor(0x6639BA),    // syntaxDecorator - purple
+        hexColor(0x0550AE),    // syntaxConstant - blue
+        hexColor(0x1A7F37),    // syntaxDiffAdd - green
+        hexColor(0xCF222E),    // syntaxDiffRemove - red
+        hexColor(0x6E7781)     // syntaxDiffHeader - gray
     },
 
-    // 2. Sakura - Japanese cherry blossom, soft pink elegance
+    // 2. One Light - Atom One Light
     {
-        L"Sakura", L"Segoe UI", L"Consolas", false,
-        hexColor(0xFDF8F8),    // background - soft blush white
-        hexColor(0x404040),    // text - soft charcoal
-        hexColor(0xC44569),    // heading - deep rose
-        hexColor(0xE8749A),    // link - coral pink
-        hexColor(0x8B5570),    // code - plum
-        hexColor(0xF8ECF0),    // codeBackground - blush
-        hexColor(0xE8B4C0),    // blockquoteBorder
-        hexColor(0xC44569),    // accent
-        // Syntax colors
-        hexColor(0xC44569),    // syntaxKeyword - rose
-        hexColor(0x2E8B57),    // syntaxString - sea green
-        hexColor(0x999999),    // syntaxComment - gray
-        hexColor(0xE8749A),    // syntaxNumber - coral pink
-        hexColor(0x6A5ACD),    // syntaxFunction - slate blue
-        hexColor(0x8B5570),    // syntaxType - plum
-        hexColor(0x9B30FF)     // syntaxControlFlow - purple
+        L"One Light", L"Segoe UI", L"Consolas", false,
+        hexColor(0xFAFAFA),    // background
+        hexColor(0x383A42),    // text
+        hexColor(0x383A42),    // heading
+        hexColor(0x4078F2),    // link - blue
+        hexColor(0x383A42),    // code
+        hexColor(0xF0F0F0),    // codeBackground
+        hexColor(0xDFDFE0),    // blockquoteBorder
+        hexColor(0x4078F2),    // accent - blue
+        // Syntax colors (One Light)
+        hexColor(0xA626A4),    // syntaxKeyword - purple
+        hexColor(0x50A14F),    // syntaxString - green
+        hexColor(0xA0A1A7),    // syntaxComment - gray
+        hexColor(0xD75F00),    // syntaxNumber - orange
+        hexColor(0x4078F2),    // syntaxFunction - blue
+        hexColor(0xC18401),    // syntaxType - yellow
+        hexColor(0xA626A4),    // syntaxControlFlow - purple
+        hexColor(0xA626A4),    // syntaxDecorator - purple
+        hexColor(0xC18401),    // syntaxConstant - yellow/gold
+        hexColor(0x50A14F),    // syntaxDiffAdd - green
+        hexColor(0xE45649),    // syntaxDiffRemove - red
+        hexColor(0xA0A1A7)     // syntaxDiffHeader - gray
     },
 
-    // 3. Arctic - Nordic ice blues, crisp and clean
+    // 3. Ayu Light
     {
-        L"Arctic", L"Segoe UI", L"Cascadia Code", false,
-        hexColor(0xF7FAFC),    // background - ice white
-        hexColor(0x2D3748),    // text - deep slate
-        hexColor(0x1A365D),    // heading - navy
-        hexColor(0x3182CE),    // link - bright blue
-        hexColor(0x285E61),    // code - teal
-        hexColor(0xEBF8FF),    // codeBackground - light blue
-        hexColor(0xA0C4E8),    // blockquoteBorder
-        hexColor(0x3182CE),    // accent
-        // Syntax colors
-        hexColor(0x0066CC),    // syntaxKeyword - blue
-        hexColor(0x2E8B57),    // syntaxString - sea green
-        hexColor(0x708090),    // syntaxComment - slate gray
-        hexColor(0xD2691E),    // syntaxNumber - chocolate
-        hexColor(0x1A365D),    // syntaxFunction - navy
-        hexColor(0x6B5B95),    // syntaxType - purple
-        hexColor(0x8B008B)     // syntaxControlFlow - dark magenta
-    },
-
-    // 4. Meadow - Fresh organic greens, nature-inspired
-    {
-        L"Meadow", L"Segoe UI", L"Consolas", false,
-        hexColor(0xF7FAF7),    // background - soft white-green
-        hexColor(0x1A2F1A),    // text - forest
-        hexColor(0x1C4532),    // heading - deep green
-        hexColor(0x38A169),    // link - fresh green
-        hexColor(0x4A5568),    // code - slate
-        hexColor(0xE6FFED),    // codeBackground - mint
-        hexColor(0x9AE6B4),    // blockquoteBorder
-        hexColor(0x38A169),    // accent
-        // Syntax colors
-        hexColor(0x1C4532),    // syntaxKeyword - deep green
-        hexColor(0x8B4513),    // syntaxString - saddle brown
-        hexColor(0x708090),    // syntaxComment - slate gray
-        hexColor(0xD2691E),    // syntaxNumber - chocolate
-        hexColor(0x38A169),    // syntaxFunction - fresh green
-        hexColor(0x6B5B95),    // syntaxType - purple
-        hexColor(0x8F08C4)     // syntaxControlFlow - purple
-    },
-
-    // 5. Dusk - Golden hour warmth, sunset tones
-    {
-        L"Dusk", L"Segoe UI", L"Consolas", false,
-        hexColor(0xFFFBF5),    // background - warm white
-        hexColor(0x553C10),    // text - deep amber
-        hexColor(0x9C4221),    // heading - burnt orange
-        hexColor(0xB7791F),    // link - gold
-        hexColor(0x5F5030),    // code - olive
-        hexColor(0xFEF5E7),    // codeBackground - cream
-        hexColor(0xE8C48D),    // blockquoteBorder
-        hexColor(0xB7791F),    // accent
-        // Syntax colors
-        hexColor(0x9C4221),    // syntaxKeyword - burnt orange
-        hexColor(0x2E8B57),    // syntaxString - sea green
-        hexColor(0x808080),    // syntaxComment - gray
-        hexColor(0xB7791F),    // syntaxNumber - gold
-        hexColor(0x4169E1),    // syntaxFunction - royal blue
-        hexColor(0x8B4513),    // syntaxType - saddle brown
-        hexColor(0x8B008B)     // syntaxControlFlow - dark magenta
+        L"Ayu Light", L"Segoe UI", L"Consolas", false,
+        hexColor(0xFAFAFA),    // background
+        hexColor(0x5C6166),    // text
+        hexColor(0x5C6166),    // heading
+        hexColor(0x399EE6),    // link - blue
+        hexColor(0x5C6166),    // code
+        hexColor(0xF0F0F0),    // codeBackground
+        hexColor(0xDFDFDF),    // blockquoteBorder
+        hexColor(0x399EE6),    // accent - blue
+        // Syntax colors (Ayu Light)
+        hexColor(0xFA8D3E),    // syntaxKeyword - orange
+        hexColor(0x86B300),    // syntaxString - green
+        hexColor(0xA0A0A0),    // syntaxComment - gray
+        hexColor(0xA37ACC),    // syntaxNumber - purple
+        hexColor(0x55B4D4),    // syntaxFunction - cyan
+        hexColor(0x399EE6),    // syntaxType - blue
+        hexColor(0xFA8D3E),    // syntaxControlFlow - orange
+        hexColor(0xE6BA7E),    // syntaxDecorator - amber
+        hexColor(0xA37ACC),    // syntaxConstant - purple
+        hexColor(0x6CBF43),    // syntaxDiffAdd - green
+        hexColor(0xF07171),    // syntaxDiffRemove - red
+        hexColor(0xA0A0A0)     // syntaxDiffHeader - gray
     },
 
     // ═══════════════════════════════════════════════════════════
     // DARK THEMES
     // ═══════════════════════════════════════════════════════════
 
-    // 6. Midnight - Deep space, cosmic tranquility
+    // 4. GitHub Dark
     {
-        L"Midnight", L"Segoe UI", L"Cascadia Code", true,
-        hexColor(0x0D1B2A),    // background - deep navy
-        hexColor(0xE0E1DD),    // text - soft blue-white
-        hexColor(0xF0F4F8),    // heading - moonlight
-        hexColor(0x00B4D8),    // link - electric blue
-        hexColor(0x90E0EF),    // code - cyan
-        hexColor(0x1B263B),    // codeBackground - deep blue
-        hexColor(0x415A77),    // blockquoteBorder
-        hexColor(0x00B4D8),    // accent
-        // Syntax colors
-        hexColor(0x00B4D8),    // syntaxKeyword - electric blue
-        hexColor(0x98FB98),    // syntaxString - pale green
-        hexColor(0x6C7A89),    // syntaxComment - gray-blue
-        hexColor(0xFFD700),    // syntaxNumber - gold
-        hexColor(0x90E0EF),    // syntaxFunction - cyan
-        hexColor(0xDDA0DD),    // syntaxType - plum
-        hexColor(0xDA70D6)     // syntaxControlFlow - orchid
+        L"GitHub Dark", L"Segoe UI", L"Consolas", true,
+        hexColor(0x0D1117),    // background - dark blue-gray
+        hexColor(0xF0F6FC),    // text - soft white
+        hexColor(0xF0F6FC),    // heading - same as text
+        hexColor(0x4493F8),    // link - bright blue
+        hexColor(0xF0F6FC),    // code - soft white
+        hexColor(0x151B23),    // codeBackground - darker
+        hexColor(0x3D444D),    // blockquoteBorder
+        hexColor(0x4493F8),    // accent - blue
+        // Syntax colors (GitHub Dark)
+        hexColor(0xFF7B72),    // syntaxKeyword - salmon red
+        hexColor(0xA5D6FF),    // syntaxString - light blue
+        hexColor(0x9198A1),    // syntaxComment - gray
+        hexColor(0x79C0FF),    // syntaxNumber - sky blue
+        hexColor(0xD2A8FF),    // syntaxFunction - lavender
+        hexColor(0x79C0FF),    // syntaxType - sky blue
+        hexColor(0xFF7B72),    // syntaxControlFlow - salmon red
+        hexColor(0xD2A8FF),    // syntaxDecorator - lavender
+        hexColor(0x79C0FF),    // syntaxConstant - sky blue
+        hexColor(0x3FB950),    // syntaxDiffAdd - green
+        hexColor(0xFF7B72),    // syntaxDiffRemove - salmon red
+        hexColor(0x9198A1)     // syntaxDiffHeader - gray
     },
 
-    // 7. Dracula - Classic dark, purples and pinks
+    // 5. OneDark - Atom One Dark
     {
-        L"Dracula", L"Segoe UI", L"Consolas", true,
-        hexColor(0x282A36),    // background - deep purple-gray
-        hexColor(0xF8F8F2),    // text - light gray
-        hexColor(0xFF79C6),    // heading - pink
-        hexColor(0x8BE9FD),    // link - cyan
-        hexColor(0x50FA7B),    // code - green
-        hexColor(0x21222C),    // codeBackground - darker
-        hexColor(0x6272A4),    // blockquoteBorder
-        hexColor(0xBD93F9),    // accent - purple
-        // Syntax colors (Dracula palette)
-        hexColor(0xFF79C6),    // syntaxKeyword - pink
-        hexColor(0xF1FA8C),    // syntaxString - yellow
-        hexColor(0x6272A4),    // syntaxComment - gray
-        hexColor(0xBD93F9),    // syntaxNumber - purple
-        hexColor(0x50FA7B),    // syntaxFunction - green
-        hexColor(0x8BE9FD),    // syntaxType - cyan
-        hexColor(0xBD93F9)     // syntaxControlFlow - purple
+        L"OneDark", L"Segoe UI", L"Cascadia Code", true,
+        hexColor(0x1E222A),    // background
+        hexColor(0xABB2BF),    // text
+        hexColor(0xC8CCD4),    // heading - lighter
+        hexColor(0x61AFEF),    // link - blue
+        hexColor(0x98C379),    // code - green
+        hexColor(0x282C34),    // codeBackground
+        hexColor(0x545862),    // blockquoteBorder
+        hexColor(0x61AFEF),    // accent - blue
+        // Syntax colors (OneDark)
+        hexColor(0xC678DD),    // syntaxKeyword - purple
+        hexColor(0x98C379),    // syntaxString - green
+        hexColor(0x545862),    // syntaxComment - gray
+        hexColor(0xD19A66),    // syntaxNumber - orange
+        hexColor(0x61AFEF),    // syntaxFunction - blue
+        hexColor(0xE5C07B),    // syntaxType - yellow
+        hexColor(0xC678DD),    // syntaxControlFlow - purple
+        hexColor(0xE5C07B),    // syntaxDecorator - yellow
+        hexColor(0xD19A66),    // syntaxConstant - orange
+        hexColor(0x98C379),    // syntaxDiffAdd - green
+        hexColor(0xE06C75),    // syntaxDiffRemove - red
+        hexColor(0x545862)     // syntaxDiffHeader - gray
     },
 
-    // 8. Forest - Deep mystical greens
+    // 6. Ayu Dark
     {
-        L"Forest", L"Segoe UI", L"Consolas", true,
-        hexColor(0x0D1512),    // background - deep green-black
-        hexColor(0xB8C5B2),    // text - sage
-        hexColor(0x9AE6B4),    // heading - bright green
-        hexColor(0x68D391),    // link - lime
-        hexColor(0x81E6D9),    // code - mint
-        hexColor(0x1A2A23),    // codeBackground - dark green
-        hexColor(0x4A6E5A),    // blockquoteBorder
-        hexColor(0x68D391),    // accent
-        // Syntax colors
-        hexColor(0x9AE6B4),    // syntaxKeyword - bright green
-        hexColor(0xF0E68C),    // syntaxString - khaki
-        hexColor(0x5F7A6A),    // syntaxComment - muted green
-        hexColor(0xFFB86C),    // syntaxNumber - orange
-        hexColor(0x68D391),    // syntaxFunction - lime
-        hexColor(0x81E6D9),    // syntaxType - mint
-        hexColor(0xE6A0FF)     // syntaxControlFlow - lavender
+        L"Ayu Dark", L"Segoe UI", L"Cascadia Code", true,
+        hexColor(0x0B0E14),    // background
+        hexColor(0xC9C7BE),    // text
+        hexColor(0xE6E1CF),    // heading - brighter
+        hexColor(0x36A3D9),    // link - blue
+        hexColor(0xAAD84C),    // code - green
+        hexColor(0x1C1F25),    // codeBackground
+        hexColor(0x2B2E34),    // blockquoteBorder
+        hexColor(0x36A3D9),    // accent - blue
+        // Syntax colors (Ayu Dark)
+        hexColor(0xFFB454),    // syntaxKeyword - orange
+        hexColor(0xAAD84C),    // syntaxString - green
+        hexColor(0x54575D),    // syntaxComment - gray
+        hexColor(0xFFEE99),    // syntaxNumber - yellow
+        hexColor(0xFFA455),    // syntaxFunction - orange
+        hexColor(0x56C3F9),    // syntaxType - blue
+        hexColor(0xFFB454),    // syntaxControlFlow - orange
+        hexColor(0xE6B673),    // syntaxDecorator - gold
+        hexColor(0xFFEE99),    // syntaxConstant - yellow
+        hexColor(0xAAD84C),    // syntaxDiffAdd - green
+        hexColor(0xF07171),    // syntaxDiffRemove - red
+        hexColor(0x54575D)     // syntaxDiffHeader - gray
     },
 
-    // 9. Ember - Warm charcoal with fire accents
+    // 7. VS Code Dark
     {
-        L"Ember", L"Segoe UI", L"Consolas", true,
-        hexColor(0x1A1614),    // background - warm black
-        hexColor(0xD4C5B9),    // text - warm gray
-        hexColor(0xF6AD55),    // heading - amber
-        hexColor(0xED8936),    // link - orange
-        hexColor(0xFC8181),    // code - coral
-        hexColor(0x252019),    // codeBackground - dark warm
-        hexColor(0x5C4A3A),    // blockquoteBorder
-        hexColor(0xED8936),    // accent
-        // Syntax colors
-        hexColor(0xF6AD55),    // syntaxKeyword - amber
-        hexColor(0x98FB98),    // syntaxString - pale green
-        hexColor(0x6B5B4F),    // syntaxComment - warm gray
-        hexColor(0xFC8181),    // syntaxNumber - coral
-        hexColor(0xED8936),    // syntaxFunction - orange
-        hexColor(0xDDA0DD),    // syntaxType - plum
-        hexColor(0xFF69B4)     // syntaxControlFlow - hot pink
-    },
-
-    // 10. Abyss - True black, neon accents (OLED-friendly)
-    {
-        L"Abyss", L"Segoe UI Light", L"Cascadia Mono", true,
-        hexColor(0x000000),    // background - pure black
-        hexColor(0xFFFFFF),    // text - pure white
-        hexColor(0x00FFE1),    // heading - cyan
-        hexColor(0xFF00FF),    // link - magenta
-        hexColor(0xAAFF00),    // code - lime
-        hexColor(0x0A0A0A),    // codeBackground - near black
-        hexColor(0x333333),    // blockquoteBorder
-        hexColor(0x00FFE1),    // accent
-        // Syntax colors (neon)
-        hexColor(0xFF00FF),    // syntaxKeyword - magenta
-        hexColor(0xAAFF00),    // syntaxString - lime
-        hexColor(0x666666),    // syntaxComment - dark gray
-        hexColor(0xFF6600),    // syntaxNumber - orange
-        hexColor(0x00FFE1),    // syntaxFunction - cyan
-        hexColor(0xFFFF00),    // syntaxType - yellow
-        hexColor(0xFF00FF)     // syntaxControlFlow - magenta
+        L"VS Code Dark", L"Segoe UI", L"Cascadia Code", true,
+        hexColor(0x1E1E1E),    // background
+        hexColor(0xD4D4D4),    // text
+        hexColor(0xFFFFFF),    // heading - white
+        hexColor(0x569CD6),    // link - blue
+        hexColor(0x9CDCFE),    // code - light cyan
+        hexColor(0x262626),    // codeBackground
+        hexColor(0x3C3C3C),    // blockquoteBorder
+        hexColor(0x569CD6),    // accent - blue
+        // Syntax colors (VS Code Dark+)
+        hexColor(0x569CD6),    // syntaxKeyword - blue
+        hexColor(0xCE9178),    // syntaxString - orange-brown
+        hexColor(0x6A9955),    // syntaxComment - green
+        hexColor(0xB5CEA8),    // syntaxNumber - light green
+        hexColor(0xDCDCAA),    // syntaxFunction - yellow
+        hexColor(0x4EC9B0),    // syntaxType - teal
+        hexColor(0xC586C0),    // syntaxControlFlow - pink
+        hexColor(0xDCDCAA),    // syntaxDecorator - yellow
+        hexColor(0x4FC1FF),    // syntaxConstant - bright blue
+        hexColor(0x6A9955),    // syntaxDiffAdd - green
+        hexColor(0xF44747),    // syntaxDiffRemove - red
+        hexColor(0x858585)     // syntaxDiffHeader - gray
     }
 };
 

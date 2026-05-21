@@ -49,14 +49,27 @@ Built with Direct2D and DirectWrite for hardware-accelerated rendering. <1MB bin
 | `Arrow keys` / `J/K` | Scroll |
 | `Page Up/Down` | Page scroll |
 | `Home/End` | Jump to start/end |
-| `:` | Enter edit mode |
+| `:` / `ö` | Enter edit mode |
 | `ESC` `ESC` | Exit edit mode |
 | `Ctrl+S` | Save (in edit mode) |
+| `Ctrl+W` | Toggle word wrap (in edit mode) |
 | `Q` | Quit |
 
 ## Building
 
-Requires Windows with Visual Studio 2019+ and CMake 3.15+.
+Requires Windows with Visual Studio 2019+ and CMake 3.25+.
+
+### Using CMake Presets (recommended)
+
+```bash
+# Configure and build in one step
+cmake --workflow --preset release
+
+# Debug build
+cmake --workflow --preset debug
+```
+
+### Manual
 
 ```bash
 mkdir build
@@ -65,7 +78,7 @@ cmake ..
 cmake --build . --config Release
 ```
 
-The executable will be at `build/Release/tinta.exe`.
+The executable will be at `build/tinta.exe`.
 
 ## Usage
 

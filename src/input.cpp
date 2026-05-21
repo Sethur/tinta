@@ -48,6 +48,8 @@ void handleMouseWheel(App& app, HWND hwnd, WPARAM wParam, LPARAM lParam) {
             }
             return;
         }
+        // Preview pane scroll in edit mode — mark so sync goes preview→editor
+        app.editorScrolledLast = false;
         // Fall through to normal scroll for preview pane
     }
 
@@ -203,6 +205,7 @@ void handleMouseMove(App& app, HWND hwnd, LPARAM lParam) {
             app.scrollY = app.scrollbarDragStartScroll + scrollDelta;
             app.scrollY = std::max(0.0f, std::min(app.scrollY, maxScroll));
             app.targetScrollY = app.scrollY;
+            if (app.editMode) app.editorScrolledLast = false;
             InvalidateRect(hwnd, nullptr, FALSE);
         }
         return;
@@ -656,14 +659,18 @@ void handleMouseUp(App& app, HWND hwnd, WPARAM wParam, LPARAM lParam) {
         float panelY = (app.height - panelHeight) / 2;
         float gridStartY = panelY + dpi(app, 75.0f);
         float cardWidth = (panelWidth - dpi(app, 60.0f)) / 2;
-        float cardHeight = (panelHeight - dpi(app, 130.0f)) / 5;
+        int numLight = 0, numDark = 0;
+        for (int j = 0; j < THEME_COUNT; j++) { if (THEMES[j].isDark) numDark++; else numLight++; }
+        int maxRows = (numLight > numDark) ? numLight : numDark;
+        float cardHeight = (panelHeight - dpi(app, 130.0f)) / (maxRows > 0 ? maxRows : 1);
         float cardPadding = dpi(app, 8.0f);
 
         int clickedTheme = -1;
+        int lightIdx = 0, darkIdx = 0;
         for (int i = 0; i < THEME_COUNT; i++) {
             const D2DTheme& t = THEMES[i];
             int col = t.isDark ? 1 : 0;
-            int row = t.isDark ? (i - 5) : i;
+            int row = t.isDark ? darkIdx++ : lightIdx++;
 
             float cardX = panelX + dpi(app, 20.0f) + col * (cardWidth + dpi(app, 20.0f));
             float cardY = gridStartY + row * cardHeight;
@@ -927,6 +934,7 @@ void handleKeyDown(App& app, HWND hwnd, WPARAM wParam) {
                     app.showThemeChooser = !app.showThemeChooser;
                     if (app.showThemeChooser) {
                         app.themeChooserAnimation = 0;
+                        app.hoveredThemeIndex = app.currentThemeIndex;
                     }
                 }
                 InvalidateRect(hwnd, nullptr, FALSE);
@@ -946,14 +954,78 @@ void handleKeyDown(App& app, HWND hwnd, WPARAM wParam) {
                 break;
             case VK_UP:
             case 'K':
-                if (!app.showSearch) {
+                if (app.showThemeChooser) {
+                    // Navigate theme grid: move up within column (find prev theme in same column)
+                    int idx = app.hoveredThemeIndex;
+                    if (idx < 0) idx = app.currentThemeIndex;
+                    bool isDark = THEMES[idx].isDark;
+                    // Find previous theme in same column
+                    for (int j = idx - 1; j >= 0; j--) {
+                        if (THEMES[j].isDark == isDark) { app.hoveredThemeIndex = j; break; }
+                    }
+                } else if (!app.showSearch) {
                     app.targetScrollY -= dpi(app, 50.0f);
                 }
                 break;
             case VK_DOWN:
             case 'J':
-                if (!app.showSearch) {
+                if (app.showThemeChooser) {
+                    // Navigate theme grid: move down within column (find next theme in same column)
+                    int idx = app.hoveredThemeIndex;
+                    if (idx < 0) idx = app.currentThemeIndex;
+                    bool isDark = THEMES[idx].isDark;
+                    for (int j = idx + 1; j < THEME_COUNT; j++) {
+                        if (THEMES[j].isDark == isDark) { app.hoveredThemeIndex = j; break; }
+                    }
+                } else if (!app.showSearch) {
                     app.targetScrollY += dpi(app, 50.0f);
+                }
+                break;
+            case VK_LEFT:
+                if (app.showThemeChooser) {
+                    // Move to light column at same row
+                    int idx = app.hoveredThemeIndex;
+                    if (idx < 0) idx = app.currentThemeIndex;
+                    if (THEMES[idx].isDark) {
+                        // Find row of current dark theme
+                        int darkRow = 0;
+                        for (int j = 0; j < idx; j++) { if (THEMES[j].isDark) darkRow++; }
+                        // Find light theme at same row
+                        int lightRow = 0;
+                        for (int j = 0; j < THEME_COUNT; j++) {
+                            if (!THEMES[j].isDark) {
+                                if (lightRow == darkRow) { app.hoveredThemeIndex = j; break; }
+                                lightRow++;
+                            }
+                        }
+                    }
+                }
+                break;
+            case VK_RIGHT:
+                if (app.showThemeChooser) {
+                    // Move to dark column at same row
+                    int idx = app.hoveredThemeIndex;
+                    if (idx < 0) idx = app.currentThemeIndex;
+                    if (!THEMES[idx].isDark) {
+                        // Find row of current light theme
+                        int lightRow = 0;
+                        for (int j = 0; j < idx; j++) { if (!THEMES[j].isDark) lightRow++; }
+                        // Find dark theme at same row
+                        int darkRow = 0;
+                        for (int j = 0; j < THEME_COUNT; j++) {
+                            if (THEMES[j].isDark) {
+                                if (darkRow == lightRow) { app.hoveredThemeIndex = j; break; }
+                                darkRow++;
+                            }
+                        }
+                    }
+                }
+                break;
+            case VK_RETURN:
+                if (app.showThemeChooser && app.hoveredThemeIndex >= 0) {
+                    applyTheme(app, app.hoveredThemeIndex);
+                    app.showThemeChooser = false;
+                    app.themeChooserAnimation = 0;
                 }
                 break;
             case VK_PRIOR: // Page Up
@@ -994,7 +1066,7 @@ void handleCharInput(App& app, HWND hwnd, WPARAM wParam) {
     // ':' to enter edit mode, '?' to toggle help — when no overlay is active
     if (!app.showSearch && !app.showFolderBrowser && !app.showToc && !app.showThemeChooser) {
         wchar_t ch = (wchar_t)wParam;
-        if (ch == L':' && !app.showHelp) {
+        if ((ch == L':' || ch == L'\u00f6' || ch == L'\u00d6') && !app.showHelp) {
             enterEditMode(app);
             return;
         }
