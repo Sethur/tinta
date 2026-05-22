@@ -168,6 +168,7 @@ const std::unordered_set<std::wstring>* getKeywordsForLanguage(int lang) {
 
 std::vector<SyntaxToken> tokenizeLine(const std::wstring& line, int language, bool& inBlockComment) {
     std::vector<SyntaxToken> tokens;
+    tokens.reserve(16);  // Most lines have fewer than 16 tokens
     const std::unordered_set<std::wstring>* keywords = getKeywordsForLanguage(language);
 
     // Diff: tokenize code normally, but mark prefix for background coloring
@@ -186,14 +187,57 @@ std::vector<SyntaxToken> tokenizeLine(const std::wstring& line, int language, bo
         if (line[0] == L'+' || line[0] == L'-') {
             SyntaxTokenType prefixType = (line[0] == L'+') ? SyntaxTokenType::DiffAdd : SyntaxTokenType::DiffRemove;
             tokens.push_back({std::wstring_view(line.data(), 1), prefixType});
-            // Tokenize the rest of the line as generic code (language 0 path)
-            std::wstring rest = line.substr(1);
-            bool innerBlockComment = false;
-            std::vector<SyntaxToken> innerTokens = tokenizeLine(rest, 0, innerBlockComment);
-            // Remap string_views to point into original line
-            for (const auto& t : innerTokens) {
-                size_t offset = (t.text.data() - rest.data()) + 1;
-                tokens.push_back({std::wstring_view(line.data() + offset, t.text.length()), t.tokenType});
+            // Tokenize the rest of the line inline (avoid recursive call and substr allocation)
+            size_t i = 1;
+            while (i < line.length()) {
+                wchar_t c = line[i];
+                if (iswspace(c)) {
+                    size_t start = i;
+                    while (i < line.length() && iswspace(line[i])) i++;
+                    tokens.push_back({std::wstring_view(line.data() + start, i - start), SyntaxTokenType::Plain});
+                } else if (c == L'"' || c == L'\'') {
+                    size_t start = i;
+                    wchar_t quote = c;
+                    i++;
+                    while (i < line.length()) {
+                        if (line[i] == L'\\' && i + 1 < line.length()) i += 2;
+                        else if (line[i] == quote) { i++; break; }
+                        else i++;
+                    }
+                    tokens.push_back({std::wstring_view(line.data() + start, i - start), SyntaxTokenType::String});
+                } else if (iswdigit(c) || (c == L'.' && i + 1 < line.length() && iswdigit(line[i+1]))) {
+                    size_t start = i;
+                    if (c == L'0' && i + 1 < line.length() && (line[i+1] == L'x' || line[i+1] == L'X')) {
+                        i += 2; while (i < line.length() && iswxdigit(line[i])) i++;
+                    } else {
+                        while (i < line.length() && (iswdigit(line[i]) || line[i] == L'.' || line[i] == L'e' || line[i] == L'E')) i++;
+                    }
+                    tokens.push_back({std::wstring_view(line.data() + start, i - start), SyntaxTokenType::Number});
+                } else if (c == L'/' && i + 1 < line.length() && line[i+1] == L'/') {
+                    tokens.push_back({std::wstring_view(line.data() + i, line.length() - i), SyntaxTokenType::Comment});
+                    i = line.length();
+                } else if (iswalpha(c) || c == L'_') {
+                    size_t start = i;
+                    while (i < line.length() && (iswalnum(line[i]) || line[i] == L'_')) i++;
+                    std::wstring_view view(line.data() + start, i - start);
+                    size_t next = i;
+                    while (next < line.length() && iswspace(line[next])) next++;
+                    if (next < line.length() && line[next] == L'(') {
+                        tokens.push_back({view, SyntaxTokenType::Function});
+                    } else if (view.length() >= 2) {
+                        bool allCaps = true, hasLetter = false;
+                        for (size_t k = 0; k < view.length(); k++) {
+                            if (iswupper(view[k])) hasLetter = true;
+                            else if (view[k] != L'_' && !iswdigit(view[k])) { allCaps = false; break; }
+                        }
+                        tokens.push_back({view, (allCaps && hasLetter) ? SyntaxTokenType::Constant : SyntaxTokenType::Plain});
+                    } else {
+                        tokens.push_back({view, SyntaxTokenType::Plain});
+                    }
+                } else {
+                    tokens.push_back({std::wstring_view(line.data() + i, 1), SyntaxTokenType::Operator});
+                    i++;
+                }
             }
             return tokens;
         }
@@ -388,13 +432,15 @@ std::vector<SyntaxToken> tokenizeLine(const std::wstring& line, int language, bo
         if (iswalpha(c) || c == L'_') {
             size_t start = i;
             while (i < line.length() && (iswalnum(line[i]) || line[i] == L'_')) i++;
-            std::wstring word = line.substr(start, i - start);
             std::wstring_view view(line.data() + start, i - start);
 
             // Check if it's a function call (followed by parenthesis)
             size_t next = i;
             while (next < line.length() && iswspace(line[next])) next++;
             bool isFunction = (next < line.length() && line[next] == L'(');
+
+            // Construct word for set lookup (needed for unordered_set)
+            std::wstring word(view);
 
             // Check if keyword (C# separates control flow from other keywords)
             if (language == 7 && CSHARP_CONTROL_FLOW.count(word)) {

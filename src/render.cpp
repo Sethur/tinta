@@ -519,12 +519,13 @@ static void layoutCodeBlock(App& app, const ElementPtr& elem, float& y, float in
     bool inBlockComment = false;
     size_t codeDocStart = app.docText.size();
     size_t lineStart = 0;
+    std::wstring wline;  // reuse buffer across iterations
 
     while (lineStart <= wcode.length()) {
         size_t lineEnd = wcode.find(L'\n', lineStart);
         if (lineEnd == std::wstring::npos) lineEnd = wcode.length();
 
-        std::wstring wline = wcode.substr(lineStart, lineEnd - lineStart);
+        wline.assign(wcode, lineStart, lineEnd - lineStart);
         if (!wline.empty() && wline.back() == L'\r') wline.pop_back();
 
         size_t lineDocStart = codeDocStart + lineStart;

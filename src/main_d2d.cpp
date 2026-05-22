@@ -618,10 +618,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_SIZE:
             if (app && app->d2dFactory) {
-                app->width = LOWORD(lParam);
-                app->height = HIWORD(lParam);
+                int newWidth = LOWORD(lParam);
+                int newHeight = HIWORD(lParam);
+                bool widthChanged = (newWidth != app->width);
+                app->width = newWidth;
+                app->height = newHeight;
                 createRenderTarget(*app);
-                app->layoutDirty = true;
+                if (widthChanged) app->layoutDirty = true;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
